@@ -105,7 +105,7 @@ jobs:
           git add pipeline/state
           if ! git diff --cached --quiet; then
             git commit -m "Dữ liệu Drive cập nhật, data đến $(jq -r .last docs/version.json)"
-            git pull --rebase --quiet && git push
+            git pull --rebase --autostash --quiet && git push
           fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
