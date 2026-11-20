@@ -1,0 +1,13 @@
+# dữ liệu Drive tải về khi chạy (không đưa lên repo)
+data/
+# kết quả dựng (xuất bản qua GitHub Pages artifact)
+docs/
+pipeline/work/
+pipeline/etl/out/
+pipeline/etl/*.json
+!pipeline/etl/imgkeys.json
+pipeline/rb/out.html
+pipeline/rb/hero.js
+pipeline/node_modules/
+__pycache__/
+*.pyc

@@ -1,0 +1,102 @@
+name: Cập nhật dashboard từ Drive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # mỗi 5 phút; GitHub có thể chạy trễ vài phút khi hệ thống bận
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Dựng lại kể cả khi Drive không đổi'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ['pipeline/**', '!pipeline/state/**', '.github/workflows/refresh.yml']
+
+concurrency:
+  group: refresh-dashboard
+  cancel-in-progress: false
+
+jobs:
+  # 1. Kiểm tra nhanh: Drive có file mới/đổi so với lần dựng trước không
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            pipeline/sync_drive.py
+            pipeline/requirements.txt
+            pipeline/state
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - run: pip install -q google-api-python-client==2.202.0 google-auth==2.62.2
+      - name: So sánh Drive
+        id: sync
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+          DRIVE_ROOT_ID: ${{ vars.DRIVE_ROOT_ID }}
+          FORCE: ${{ github.event_name == 'push' || inputs.force == true }}
+          CHECK_ONLY: 'true'
+        run: python pipeline/sync_drive.py
+
+  # 2. Chỉ chạy khi có thay đổi: tải dữ liệu, dựng dashboard, xuất bản GitHub Pages
+  build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: pipeline/package-lock.json
+      - name: Cài thư viện
+        run: |
+          pip install -q -r pipeline/requirements.txt
+          cd pipeline && npm ci --no-audit --no-fund
+      - name: Tải dữ liệu Drive
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+          DRIVE_ROOT_ID: ${{ vars.DRIVE_ROOT_ID }}
+          FORCE: 'true'
+        run: python pipeline/sync_drive.py
+      - name: Dựng dashboard
+        run: bash pipeline/build.sh
+      - name: Lưu trạng thái Drive
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898732+github-actions[bot]@users.noreply.github.com'
+          git add pipeline/state
+          if ! git diff --cached --quiet; then
+            git commit -m "Dữ liệu Drive cập nhật, data đến $(jq -r .last docs/version.json)"
+            git pull --rebase --quiet && git push
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4

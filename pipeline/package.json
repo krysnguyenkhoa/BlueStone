@@ -1,0 +1,8 @@
+{
+  "name": "bluestone-dashboard-pipeline",
+  "private": true,
+  "description": "ETL + build cho BlueStone Ecom Dashboard",
+  "dependencies": {
+    "xlsx": "0.18.5"
+  }
+}
