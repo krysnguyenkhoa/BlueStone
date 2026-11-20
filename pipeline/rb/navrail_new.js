@@ -10,7 +10,7 @@ function NavRail({
 }) {
   const [hover, setHover] = React.useState('');
   const [shut, setShut] = React.useState({});
-  const SUM = ['ovnew', 'ovkpi', 'dailynew', 'ppnew'];
+  const SUM = ['ovnew', 'ovkpi', 'weekly', 'dailynew', 'ppnew'];
   const groups = [{
     key: 'sum',
     label: 'Báo cáo tổng hợp',

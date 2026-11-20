@@ -1,6 +1,6 @@
 # BlueStone Ecom Dashboard
 
-Dashboard eCom của BlueStone (Overview, Overview KPI, Daily Tracking, Onsite Shopee, Top Super Hero SKU, Onsite TikTok Shop, Product Performance, Data Raw), tự dựng lại từ thư mục dữ liệu trên Google Drive.
+Dashboard eCom của BlueStone (Overview, Overview KPI, Weekly Tracking, Daily Tracking, Onsite Shopee, Top Super Hero SKU, Onsite TikTok Shop, Product Performance, Data Raw), tự dựng lại từ thư mục dữ liệu trên Google Drive.
 
 **Xem báo cáo:** https://krysnguyenkhoa.github.io/BlueStone/
 
@@ -90,6 +90,7 @@ pipeline/sync_drive.py          quét và tải dữ liệu Drive (service accou
 pipeline/prep.py                chuẩn bị dữ liệu: chọn file, mốc ngày, ảnh mới
 pipeline/etl/*.js               xử lý Excel thành dữ liệu dashboard
 pipeline/hero_etl.py            dữ liệu tab Top Super Hero SKU
+pipeline/weekly_etl.py          dữ liệu tab Weekly Tracking (tuần × kênh, KPI ngày)
 pipeline/rb/                    dựng các trang dashboard vào một file HTML
 pipeline/finalize.py            gắn bộ tự kiểm tra bản mới, xuất docs/
 pipeline/state/                 trạng thái Drive của lần dựng gần nhất

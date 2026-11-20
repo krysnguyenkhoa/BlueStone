@@ -9,6 +9,7 @@ python3 prep.py
 source work/env.sh
 ( cd etl && for s in cost core kpi sku onsite tiktok2 assets_core; do echo "== $s"; node "$s.js" | tail -2; done )
 python3 hero_etl.py | tail -3
+python3 weekly_etl.py "$BS_HOME/work/WEEKLY.json"
 python3 - <<'PY'
 import os
 h=os.environ['BS_HOME']+'/rb/'

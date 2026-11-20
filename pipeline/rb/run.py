@@ -17,3 +17,4 @@ rebuild.build(patches=P,post=POST,onsite=os.environ['BS_HOME']+'/etl/out/ONSITE.
 print('built',len(P))
 import add_imgs;add_imgs.run(os.environ['BS_HOME']+'/rb/out.html')
 import add_hero;add_hero.run(os.environ['BS_HOME']+'/rb/out.html')
+import add_weekly;add_weekly.run(os.environ['BS_HOME']+'/rb/out.html',os.environ['BS_HOME']+'/work/WEEKLY.json')
