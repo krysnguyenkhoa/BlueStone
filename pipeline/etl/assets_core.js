@@ -5,7 +5,8 @@ const vn=d=>d.slice(8)+'/'+d.slice(5,7)+'/'+d.slice(0,4);
 const chs=[['Shopee','Shopee','var(--channel-shopee)',true],['Tiktok Shop','Tiktok Shop','var(--channel-tiktok)',true],['Harasocial','Harasocial · Facebook','var(--channel-facebook)',true],['Website','Website · Google','var(--channel-google)',true],['Lazada','Lazada · Tiki','var(--channel-lazada)',false],['Khác','Khác','var(--channel-other)',false]];
 const lastSales={},lastSpend={};
 rows.forEach(x=>{const d=dates[x[0]];if((x[3]||x[5])&&(!lastSales[x[1]]||d>lastSales[x[1]]))lastSales[x[1]]=d;if(x[2]>0&&(!lastSpend[x[1]]||d>lastSpend[x[1]]))lastSpend[x[1]]=d});
-const channels=chs.map((c,i)=>({key:c[0],name:c[1],fill:c[2],spendable:c[3],last:lastSales[i]||LAST,spendLast:c[3]?(lastSpend[i]||null):null}));
+const CK=['shopee','tiktok','fb','google'];const covOf=i=>{const c=(C.cover||{})[CK[i]];if(!c)return lastSpend[i]||null;const m=c>LAST?LAST:c;return lastSpend[i]&&lastSpend[i]>m?lastSpend[i]:m};
+const channels=chs.map((c,i)=>({key:c[0],name:c[1],fill:c[2],spendable:c[3],last:lastSales[i]||LAST,spendLast:c[3]?covOf(i):null}));
 const camp={};
 const mk=m=>m;
 for(const m of Object.keys(C.shopeeOnCamp).filter(m=>m>='2026-01'&&m<=LAST.slice(0,7))){camp[m]=camp[m]||{};camp[m]['Shopee']={...C.shopeeOnCamp[m]}}

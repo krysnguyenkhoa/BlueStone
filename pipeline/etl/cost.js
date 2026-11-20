@@ -7,6 +7,7 @@ function iso(v){ if(v==null)return null; if(typeof v==='number'){const d=new Dat
  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)))return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;return null}
 const rows=(f,sn)=>{const wb=X.readFile(f);return X.utils.sheet_to_json(wb.Sheets[sn||wb.SheetNames[0]],{header:1,defval:null})};
 const ls=d=>fs.readdirSync(d).filter(f=>/\.(xlsx|csv)$/i.test(f)).sort().map(f=>path.join(d,f));
+const COV={};const cov=(k,d)=>{if(d&&(!COV[k]||d>COV[k]))COV[k]=d};
 const out={shopeeOn:{},shopeeOnCamp:{},offsite:{},tiktok:{},tiktokCamp:{},fb:{},google:{},googleCamp:{}};
 const add=(o,d,v)=>{o[d]=(o[d]||0)+v};
 // ---- Shopee onsite: top-ups
@@ -15,7 +16,7 @@ const seenSh=new Set();let dupSh=0;
 function fileRange(f){const m=path.basename(f).match(/^(\d{2})\.?(\d{2})(\d{4})\.(\d{2})(\d{2})(\d{4})/);if(!m)return null;return [`${m[3]}-${m[2]}-${m[1]}`,`${m[6]}-${m[5]}-${m[4]}`]}
 for(const f of ls(ROOT+'/Cost_Shopee/Onsite')){
   const rg=fileRange(f);const r=rows(f);const hi=r.findIndex(x=>x[0]==='Sequence');if(hi<0)continue;
-  for(let i=hi+1;i<r.length;i++){const x=r[i];if(!x||x[1]==null)continue;const d=iso(x[1]);const a=Number(x[3])||0;if(!d||a<=0)continue;
+  for(let i=hi+1;i<r.length;i++){const x=r[i];if(!x||x[1]==null)continue;const d=iso(x[1]);const a=Number(x[3])||0;if(d&&(!rg||(d>=rg[0]&&d<=rg[1])))cov('shopee',d);if(!d||a<=0)continue;
     if(rg&&(d<rg[0]||d>rg[1]))continue;
     const ds=norm(x[2]);let cat=null;
     if(/n.p ti.n t. d.ng|N.p Ti.n T. .ng|Top-Up Credit/i.test(ds)&&!/ưu đãi|Free Ads|Rebate|doanh thu/i.test(ds)) cat=/Top-Up Credit/i.test(ds)?'Nạp tiền (Top-Up Credit)':'Nạp tiền tự động';
@@ -41,12 +42,12 @@ const ttRec={};// pair -> [{d,nm,a}]
 const ttSeen=new Set();
 const TT_SKIP=new Set(fs.existsSync(process.env.TT_NEW||'')?fs.readdirSync(process.env.TT_NEW):[]);
 for(const f of ls(ROOT+'/Cost_Tiktok').filter(f=>!TT_SKIP.has(path.basename(f)))){const r=rows(f);const h=r[0];const iD=h.indexOf('Date'),iA=h.indexOf('Amount'),iI=h.indexOf('Campaign ID'),iN=h.indexOf('Campaign name');
-  for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;const a=-(Number(x[iA])||0);
+  for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;cov('tiktok',d);const a=-(Number(x[iA])||0);
     const k=d+'|'+x[iI]+'|'+x[iA];if(ttSeen.has(k))continue;ttSeen.add(k);
     (ttRec[d+'|'+x[iI]]=ttRec[d+'|'+x[iI]]||[]).push({d,nm:String(x[iN]||''),a})}}
 if(fs.existsSync(TT_NEW)){const nr={};
   for(const f of ls(TT_NEW)){const r=rows(f);const h=r[0];const iD=h.indexOf('Date'),iA=h.indexOf('Amount'),iI=h.indexOf('Campaign ID'),iN=h.indexOf('Campaign name');const mine={};
-    for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;(mine[d+'|'+x[iI]]=mine[d+'|'+x[iI]]||[]).push({d,nm:String(x[iN]||''),a:-(Number(x[iA])||0)})}
+    for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;cov('tiktok',d);(mine[d+'|'+x[iI]]=mine[d+'|'+x[iI]]||[]).push({d,nm:String(x[iN]||''),a:-(Number(x[iA])||0)})}
     Object.assign(nr,mine)}// later file wins per (date,campaign)
   let chg=0,add_=0;for(const [p,v] of Object.entries(nr)){const o=ttRec[p];const sm=q=>Math.round(q.reduce((s,y)=>s+y.a,0));if(!o){ttRec[p]=v;add_++}else if(sm(o)!==sm(v)){ttRec[p]=v;chg++}}
   console.log('tiktok new-files: added pairs',add_,'revised pairs',chg)}
@@ -55,12 +56,13 @@ for(const v of Object.values(ttRec))for(const y of v){const nm=y.nm;add(out.tikt
 // ---- Facebook
 const fbSeen=new Set();
 for(const f of ls(ROOT+'/Cost_Facebook')){const r=rows(f,'Raw Data Report');const h=r[0];const iD=h.indexOf('Ngày'),iS=h.indexOf('Số tiền đã chi tiêu (VND)'),iC=h.indexOf('Tên chiến dịch');
-  for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;const a=Number(x[iS])||0;const k=d+'|'+x[iC]+'|'+a;if(fbSeen.has(k))continue;fbSeen.add(k);add(out.fb,d,a)}}
+  for(let i=1;i<r.length;i++){const x=r[i];if(!x||x[iD]==null)continue;const d=iso(x[iD]);if(!d)continue;cov('fb',d);const a=Number(x[iS])||0;const k=d+'|'+x[iC]+'|'+a;if(fbSeen.has(k))continue;fbSeen.add(k);add(out.fb,d,a)}}
 // ---- Google (two accounts: Ecom, adsplus) — last file wins per account/date
 const gAcc={ecom:{},adsplus:{}};
 for(const f of ls(ROOT+'/Cost_Google')){const rg=fileRange(f);const acc=/adsplus/i.test(f)?'adsplus':'ecom';const r=rows(f);const hi=r.findIndex(x=>x[0]==='Ngày');if(hi<0)continue;const iS=r[hi].indexOf('Chi phí');
-  for(let i=hi+1;i<r.length;i++){const x=r[i];if(!x||x[0]==null)continue;const d=iso(x[0]);if(!d)continue;if(rg&&!/adsplus/i.test(f)&&(d<rg[0]||d>rg[1]))continue;gAcc[acc][d]=Number(x[iS])||0}}
+  for(let i=hi+1;i<r.length;i++){const x=r[i];if(!x||x[0]==null)continue;const d=iso(x[0]);if(!d)continue;if(rg&&!/adsplus/i.test(f)&&(d<rg[0]||d>rg[1]))continue;cov('google',d);gAcc[acc][d]=Number(x[iS])||0}}
 for(const acc of ['ecom','adsplus'])for(const d in gAcc[acc]){add(out.google,d,gAcc[acc][d]);const m=d.slice(0,7);const c=out.googleCamp[m]=out.googleCamp[m]||{};const k=acc==='ecom'?'Tài khoản Ecom':'Tài khoản adsplus';c[k]=(c[k]||0)+gAcc[acc][d]}
+cov('shopee',process.env.BS_SHCOVER);out.cover=COV;console.log('spend coverage',JSON.stringify(COV));
 fs.writeFileSync('cost.json',JSON.stringify(out));
 // compare with uploaded
 const vm=require('vm');const w={};vm.runInNewContext(fs.readFileSync(process.env.BS_HOME+'/assets/ov_asset_a58bebe0.js','utf8'),{window:w});const B=w.BSDATA;

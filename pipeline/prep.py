@@ -71,6 +71,7 @@ def iso_vn(v):
 
 top = collections.defaultdict(lambda: {'m': 0.0, 'a': 0.0})
 A = B = None
+cover = None
 for f in xlsx('Cost/Cost_Shopee/Onsite'):
     r = rng(f)
     try:
@@ -90,7 +91,10 @@ for f in xlsx('Cost/Cost_Shopee/Onsite'):
             d = iso_vn(x[1]); a = float(x[3])
         except Exception:
             continue
-        if d < r[0] or d > r[1] or a <= 0:
+        if d < r[0] or d > r[1]:
+            continue
+        cover = max(cover or d, d)
+        if a <= 0:
             continue
         ds = unicodedata.normalize('NFC', str(x[2]))
         if ds.startswith('Tiền Dịch vụ Hiển thị đã nạp'):
@@ -98,7 +102,7 @@ for f in xlsx('Cost/Cost_Shopee/Onsite'):
         elif ds.startswith('Nạp tiền tự'):
             top[d]['a'] += a
 json.dump({k: v for k, v in sorted(top.items())}, open(os.path.join(HOME, 'etl', 'shopee_topup_new.json'), 'w'))
-cfg.update(shA=A or '', shB=B or '')
+cfg.update(shA=A or '', shB=B or '', shCover=cover or '')
 print('Shopee top-up', len(top), 'ngày', A, B)
 
 # ---- 3. TikTok cost: file chồng lấn kỳ = bản tổng hợp, đưa vào tt_new ------------------------------------
@@ -188,5 +192,5 @@ cfg['built'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 json.dump(cfg, open(os.path.join(WORK, 'cfg.json'), 'w'), ensure_ascii=False, indent=1)
 # xuất biến môi trường cho các bước sau
 with open(os.path.join(WORK, 'env.sh'), 'w') as fh:
-    fh.write(f"export BS_ORDERFILE={cfg['orderFile']}\nexport BS_LAST={cfg['last']}\nexport BS_LASTM={cfg['lastM']}\nexport BS_SHM={cfg['shM']}\nexport BS_TTM={cfg['ttM']}\nexport BS_SHA={cfg['shA']}\nexport BS_SHB={cfg['shB']}\nexport TT_NEW={os.path.join(WORK, 'tt_new')}\n")
+    fh.write(f"export BS_ORDERFILE={cfg['orderFile']}\nexport BS_LAST={cfg['last']}\nexport BS_LASTM={cfg['lastM']}\nexport BS_SHM={cfg['shM']}\nexport BS_TTM={cfg['ttM']}\nexport BS_SHA={cfg['shA']}\nexport BS_SHB={cfg['shB']}\nexport BS_SHCOVER={cfg['shCover']}\nexport TT_NEW={os.path.join(WORK, 'tt_new')}\n")
 print(json.dumps(cfg, ensure_ascii=False))

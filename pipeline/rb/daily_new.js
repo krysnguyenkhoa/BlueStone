@@ -37,8 +37,9 @@ class Component extends DCLogic {
     this._ix = ix; this._ixn = D.rows.length; return ix;
   }
   agg(iso, act) {
-    const out = { s: 0, n: 0, g: 0, l: 0, o: 0 }, o = this.ix()[iso]; if (!o) return out;
-    for (const k in o) { if (act && act.indexOf(+k) < 0) continue; const a = o[k]; out.s += a[0]; out.n += a[1]; out.g += a[2]; out.l += a[3]; out.o += a[4]; }
+    const out = { s: 0, n: 0, g: 0, l: 0, o: 0, nc: 0 }, o = this.ix()[iso]; if (!o) return out;
+    const CH = this.D().channels || [];
+    for (const k in o) { if (act && act.indexOf(+k) < 0) continue; const a = o[k]; out.s += a[0]; out.n += a[1]; out.g += a[2]; out.l += a[3]; out.o += a[4]; const c = CH[+k]; if (c && c.spendable && c.spendLast && c.spendLast >= iso) out.nc += a[1]; }
     return out;
   }
   rows(m, ch) {
@@ -65,13 +66,13 @@ class Component extends DCLogic {
   calc(ch) {
     const m = this.mo(), dim = this.dimOf(m), ld = this.ldOf(m), R = this.rows(m, ch), thr = this.thr(m, ch), mt = this.mt(m, ch), hasA = !(ch.act && !ch.act.length), S = this.sum.bind(this);
     const sc = R.filter(r => r.has && this.inScope(r)), pl = sc.filter(r => r.tN != null);
-    const A = { n: S(sc, r => r.a.n), s: S(sc, r => r.a.s), g: S(sc, r => r.a.g), l: S(sc, r => r.a.l), o: S(sc, r => r.a.o), pN: S(pl, r => r.tN), pS: S(pl, r => r.tS), days: sc.length, pdays: pl.length, hit: pl.filter(r => r.a.n >= r.tN).length };
+    const A = { n: S(sc, r => r.a.n), nc: S(sc, r => r.a.nc), s: S(sc, r => r.a.s), g: S(sc, r => r.a.g), l: S(sc, r => r.a.l), o: S(sc, r => r.a.o), pN: S(pl, r => r.tN), pS: S(pl, r => r.tS), days: sc.length, pdays: pl.length, hit: pl.filter(r => r.a.n >= r.tN).length };
     const done = R.filter(r => r.has), M = { n: S(done, r => r.a.n), pTo: S(R.filter(r => r.d <= ld && r.tN != null), r => r.tN), pRest: S(R.filter(r => r.d > ld && r.tN != null), r => r.tN) };
     M.proj = M.n + M.pRest; M.avg = ld ? M.n / ld : null; M.rr = ld ? M.n / ld * dim : null;
     let Pv = null, PM = null;
     if (m > 1 && hasA) {
       const PR = this.rows(m - 1, ch), pdim = this.dimOf(m - 1), set = sc.map(r => r.d).filter(d => d <= pdim), pr = PR.filter(r => set.indexOf(r.d) >= 0), ppl = pr.filter(r => r.tN != null);
-      if (pr.length) Pv = { n: S(pr, r => r.a.n), s: S(pr, r => r.a.s), g: S(pr, r => r.a.g), o: S(pr, r => r.a.o), hit: ppl.filter(r => r.a.n >= r.tN).length, pdays: ppl.length };
+      if (pr.length) Pv = { n: S(pr, r => r.a.n), nc: S(pr, r => r.a.nc), s: S(pr, r => r.a.s), g: S(pr, r => r.a.g), o: S(pr, r => r.a.o), hit: ppl.filter(r => r.a.n >= r.tN).length, pdays: ppl.length };
       const pmt = this.mt(m - 1, ch); if (pmt && ld) PM = { n: S(PR.filter(r => r.d <= ld), r => r.a.n), t: pmt.nmv };
     }
     const scopeLbl = this.state.day ? this.dm(this.isoOf(m, this.state.day)) : this.hasFilter(dim) ? 'lọc ' + sc.length + ' ngày' : ld < dim ? '1–' + ld : 'cả tháng';
@@ -104,7 +105,7 @@ class Component extends DCLogic {
     const done = X.ld >= X.dim, mt = X.mt, tgt = mt ? mt.nmv : null, fin = done ? M.n : M.proj;
     cards.push(card('rev', 'run-rate', done ? 'Kết quả cả tháng' : 'Run-rate cuối tháng', hasA && X.hasPlan ? m(fin) : na, tgt && hasA ? (done ? 'Đạt ' : '') + p(fin / tgt, 1) + ' target tháng' : (hasA ? 'Chưa có target' : noA), tgt && hasA ? (fin >= tgt ? 'up' : 'down') : 'flat', tgt ? 'Target ' + m(tgt) + (hasA && fin < tgt ? ' · thiếu ' + m(tgt - fin) : '') : '', hasA && !done && M.rr != null && tgt ? 'Theo tốc độ TB: ' + m(M.rr) + ' (' + p(M.rr / tgt, 0) + ' target)' : (done ? '' : '')));
     // 3 CIR
-    const cir = A.n && A.s > 0 ? A.s / A.n : null, dpp = cir != null ? (cir - X.thr) * 100 : null, pcir = Pv && Pv.n && Pv.s > 0 ? Pv.s / Pv.n : null;
+    const cir = A.n && A.s > 0 ? A.s / (A.nc || A.n) : null, dpp = cir != null ? (cir - X.thr) * 100 : null, pcir = Pv && Pv.n && Pv.s > 0 ? Pv.s / (Pv.nc || Pv.n) : null;
     cards.push(card('cost', 'cir', 'CIR MTD vs ngưỡng · ' + X.scopeLbl, hasA ? p(cir, 2) : na, dpp == null ? (hasA ? 'Chưa có Spend' : noA) : (dpp <= 0 ? 'Trong ngưỡng · −' : 'Vượt ngưỡng · +') + Math.abs(dpp).toFixed(2) + 'pp', dpp == null ? 'flat' : dpp <= 0 ? 'up' : 'down', 'Ngưỡng ' + p(X.thr, 2),
       cir != null && pcir != null ? this.pill((cir - pcir <= 0 ? '▼ −' : '▲ +') + Math.abs((cir - pcir) * 100).toFixed(2) + 'pp', cir - pcir <= 0 ? 'up' : 'down') + '<span>' + lbl + '</span>' : ''));
     // 4 cần/ngày để đạt target
@@ -114,7 +115,7 @@ class Component extends DCLogic {
       hasA && need != null && M.avg != null ? 'TB ' + m(M.avg) + '/ngày · còn ' + rest + ' ngày' : '',
       hasA && planRest != null && need > 0 ? 'Plan các ngày còn lại TB ' + m(planRest) + '/ngày' + (need > planRest * 1.02 ? ' · cần cao hơn plan ' + p(need / planRest - 1, 0) : '') : ''));
     // 5 ROAS · CPO
-    const roas = A.s > 0 ? A.n / A.s : null, proas = Pv && Pv.s > 0 ? Pv.n / Pv.s : null, cpo = A.s > 0 && A.o ? A.s / A.o : null, pcpo = Pv && Pv.s > 0 && Pv.o ? Pv.s / Pv.o : null;
+    const roas = A.s > 0 ? (A.nc || A.n) / A.s : null, proas = Pv && Pv.s > 0 ? (Pv.nc || Pv.n) / Pv.s : null, cpo = A.s > 0 && A.o ? A.s / A.o : null, pcpo = Pv && Pv.s > 0 && Pv.o ? Pv.s / Pv.o : null;
     cards.push(card('cost', 'nmv', 'ROAS · CPO · ' + X.scopeLbl, hasA && roas != null ? '×' + roas.toFixed(1) : na, hasA ? (cpo != null ? 'CPO ' + m(cpo) : 'Chưa có Spend') : noA, 'flat', 'NMV / Spend · Spend / đơn không hủy',
       hasA ? this.cmp(roas, proas, 'ROAS so với ' + pmL, true) + this.cmp(cpo, pcpo, 'CPO so với ' + pmL, false) : ''));
     // 6 chi phí vs plan
@@ -124,7 +125,7 @@ class Component extends DCLogic {
     if (rw && rw.has) {
       let pv = 0, c = 0; for (let k = 1; k <= 7; k++) { const iso = this.addDays(rw.iso, -k); if (this.ix()[iso]) { pv += this.agg(iso, X.ch.act).n; c++; } }
       const att = rw.tN ? rw.a.n / rw.tN : null; if (att != null) m6 = this.meter(att, 1, att >= 1 ? 'g' : att >= 0.7 ? 'y' : 'r', 1.5);
-      cards.push(card('q', 'nmv', (st.day ? 'Ngày đã chọn ' : 'Ngày gần nhất ') + this.dm(rw.iso), m(rw.a.n), att != null ? p(att, 0) + ' KPI ngày' : 'Chưa có KPI ngày', att == null ? 'flat' : att >= 1 ? 'up' : 'down', (rw.tN ? 'KPI ngày ' + m(rw.tN) + ' · ' : '') + (rw.type || rw.dow), (c ? this.cmp(rw.a.n, pv / c, 'so với TB ' + c + ' ngày trước (' + m(pv / c) + ')', true) : '') + (rw.a.s > 0 && rw.a.n ? this.pill('Spend ' + m(rw.a.s), 'flat') + '<span>CIR ' + p(rw.a.s / rw.a.n, 1) + (rw.a.s / rw.a.n > X.thr ? ' · vượt ngưỡng' : ' · trong ngưỡng') + '</span>' : '')));
+      cards.push(card('q', 'nmv', (st.day ? 'Ngày đã chọn ' : 'Ngày gần nhất ') + this.dm(rw.iso), m(rw.a.n), att != null ? p(att, 0) + ' KPI ngày' : 'Chưa có KPI ngày', att == null ? 'flat' : att >= 1 ? 'up' : 'down', (rw.tN ? 'KPI ngày ' + m(rw.tN) + ' · ' : '') + (rw.type || rw.dow), (c ? this.cmp(rw.a.n, pv / c, 'so với TB ' + c + ' ngày trước (' + m(pv / c) + ')', true) : '') + (rw.a.s > 0 && rw.a.n ? this.pill('Spend ' + m(rw.a.s), 'flat') + '<span>CIR ' + p(rw.a.s / (rw.a.nc || rw.a.n), 1) + (rw.a.s / (rw.a.nc || rw.a.n) > X.thr ? ' · vượt ngưỡng' : ' · trong ngưỡng') + '</span>' : '')));
     } else cards.push(card('q', 'nmv', 'Ngày gần nhất', na, hasA ? 'Chưa có dữ liệu ngày' : noA, 'flat', '', ''));
     // 8 AOV
     const aov = A.o ? A.n / A.o : null, paov = Pv && Pv.o ? Pv.n / Pv.o : null, canc = A.g ? 1 - A.n / A.g : null;
@@ -152,7 +153,7 @@ class Component extends DCLogic {
       t = ch.label + ' · T' + X.m + ' ' + X.scopeLbl + ': NMV ' + m(A.n) + (att != null ? ' đạt ' + p(att, 1) + ' plan · ' + (A.pN > A.n ? 'gap −' + m(A.pN - A.n) : 'vượt +' + m(A.n - A.pN)) : '');
       if (!st.day && !this.hasFilter(X.dim) && last && last.has && last.tN) t += ' · ngày ' + this.dm(last.iso) + ' đạt ' + p(last.a.n / last.tN, 0) + ' KPI ngày';
       if (A.pdays) t += ' · ' + A.hit + '/' + A.pdays + ' ngày đạt KPI';
-      const cir = A.n && A.s > 0 ? A.s / A.n : null; if (cir != null) t += ' · CIR ' + p(cir, 2) + (cir <= X.thr ? ' trong ngưỡng ' : ' vượt ngưỡng ') + p(X.thr, 1);
+      const cir = A.n && A.s > 0 ? A.s / (A.nc || A.n) : null; if (cir != null) t += ' · CIR ' + p(cir, 2) + (cir <= X.thr ? ' trong ngưỡng ' : ' vượt ngưỡng ') + p(X.thr, 1);
     }
     return '<div class="ok-concl ' + lv + '"><span class="ok-cd"></span>' + this.esc(t) + '</div>';
   }
@@ -166,10 +167,10 @@ class Component extends DCLogic {
       const need = (tgt - M.n) / (X.dim - X.ld);
       out.push({ lv: M.proj / tgt < 0.9 ? 'Critical' : 'Watch', t: 'Cuối tháng dự kiến ' + m(M.proj) + ' · thiếu ' + m(tgt - M.proj) + ' so với target', d: 'Cần ' + m(need) + '/ngày trong ' + (X.dim - X.ld) + ' ngày còn lại · TB hiện tại ' + m(M.avg) + '/ngày (' + p(M.avg ? M.avg / need : null, 0) + ' mức cần)' });
     }
-    const cir = A.n && A.s > 0 ? A.s / A.n : null;
+    const cir = A.n && A.s > 0 ? A.s / (A.nc || A.n) : null;
     if (cir != null && cir > X.thr) out.push({ lv: cir > X.thr * 1.5 ? 'Critical' : 'Watch', t: 'CIR ' + p(cir, 2) + ' vượt ngưỡng ' + p(X.thr, 1), d: 'Spend ' + m(A.s) + ' · NMV ' + m(A.n) + ' · ' + X.scopeLbl });
-    const ov = X.sc.filter(r => r.a.n > 0 && r.a.s > 0 && r.a.s / r.a.n > X.thr);
-    if (ov.length) out.push({ lv: 'Info', t: ov.length + ' ngày CIR vượt ngưỡng ' + p(X.thr, 1), d: ov.slice(-6).map(r => dm(r.iso) + ' ' + p(r.a.s / r.a.n, 1)).join(' · ') + (ov.length > 6 ? ' · …' : '') });
+    const ov = X.sc.filter(r => r.a.n > 0 && r.a.s > 0 && r.a.s / (r.a.nc || r.a.n) > X.thr);
+    if (ov.length) out.push({ lv: 'Info', t: ov.length + ' ngày CIR vượt ngưỡng ' + p(X.thr, 1), d: ov.slice(-6).map(r => dm(r.iso) + ' ' + p(r.a.s / (r.a.nc || r.a.n), 1)).join(' · ') + (ov.length > 6 ? ' · …' : '') });
     let k = X.ld; while (k >= 1 && R[k - 1].tN != null && R[k - 1].a.n < R[k - 1].tN) k--;
     const streak = X.ld - k;
     if (!st.day && streak >= 3) out.push({ lv: streak >= 5 ? 'Critical' : 'Watch', t: streak + ' ngày liên tiếp dưới KPI ngày', d: dm(R[k].iso) + ' → ' + dm(R[X.ld - 1].iso) });
@@ -195,7 +196,7 @@ class Component extends DCLogic {
     return this.tipT(this.dm(r.iso) + ' · ' + r.dow + (r.type ? ' · ' + r.type : ''), r.has ? [
       ['NMV', m(a.n), '#2f6df0'], r.tN != null ? ['KPI ngày', m(r.tN), '#2fc7b8', 'kpi'] : ['KPI ngày', 'chưa có', '#94a3b8'],
       r.tN != null ? ['% đạt KPI', p(a.n / r.tN, 0), a.n >= r.tN ? '#12924f' : '#d6334f'] : null, r.tN != null ? [a.n >= r.tN ? 'Vượt KPI' : 'Còn thiếu', m(Math.abs(r.tN - a.n)), '#94a3b8'] : null,
-      a.s > 0 ? ['Spend · CIR', m(a.s) + ' · ' + (a.n ? p(a.s / a.n, 2) : '—'), '#94a3b8'] : null, a.o ? ['Đơn không hủy · AOV', a.o + ' · ' + m(a.n / a.o), '#94a3b8'] : null
+      a.s > 0 ? ['Spend · CIR', m(a.s) + ' · ' + (a.n ? p(a.s / (a.nc || a.n), 2) : '—'), '#94a3b8'] : null, a.o ? ['Đơn không hủy · AOV', a.o + ' · ' + m(a.n / a.o), '#94a3b8'] : null
     ] : [r.tN != null ? ['KPI ngày (kế hoạch)', m(r.tN), '#2fc7b8', 'kpi'] : ['KPI ngày', 'chưa có', '#94a3b8'], ['Trạng thái', 'chưa có số liệu', '#94a3b8']]);
   }
   wrap(cls, svg) { return '<div class="ox-tw"><div class="' + cls + '">' + svg + '</div></div>'; }
@@ -259,7 +260,7 @@ class Component extends DCLogic {
   }
   // chart 3: CIR theo ngày
   chCirDay(X) {
-    const R = X.R, n = R.length, p = this.pct.bind(this), thr = X.thr, vals = R.filter(r => r.has && r.a.n > 0 && r.a.s > 0).map(r => r.a.s / r.a.n);
+    const R = X.R, n = R.length, p = this.pct.bind(this), thr = X.thr, vals = R.filter(r => r.has && r.a.n > 0 && r.a.s > 0).map(r => r.a.s / (r.a.nc || r.a.n));
     if (!vals.length) return this.panel('ox-c5', 'CIR theo ngày so với ngưỡng', '', '<div class="ok-empty">' + (X.hasA ? 'Kênh này chưa có Spend trong tháng.' : 'Chưa có dữ liệu đơn hàng.') + '</div>', '', '');
     const W = 560, H = 330, L = 46, Rr = 10, T = 48, B = 44, pw = W - L - Rr, ph = H - T - B, bw = pw / n, mx = this.niceMax(Math.max.apply(null, vals.concat([thr])) * 1.12), Y = v => T + ph - v / mx * ph, cx = i => L + bw * i + bw / 2;
     let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="ox-svg"><defs><linearGradient id="dyc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ea8ff"/><stop offset="1" stop-color="#2f6df0"/></linearGradient></defs>' + this.axT(L, 'CIR = Spend / NMV mỗi ngày · cột = thực tế, đường = ngưỡng');
@@ -267,7 +268,7 @@ class Component extends DCLogic {
     for (let i = 0; i <= 4; i++) { const y = T + ph - ph * i / 4; s += '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + y + '" y2="' + y + '" class="ox-grid"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end" class="ox-ax">' + (mx * i / 4 * 100).toFixed(0) + '%</text>'; }
     const maxV = Math.max.apply(null, vals);
     R.forEach((r, i) => {
-      const c = r.has && r.a.n > 0 && r.a.s > 0 ? r.a.s / r.a.n : null, over = c != null && c > thr, sc = this.inScope(r), sel = this.state.day === r.d;
+      const c = r.has && r.a.n > 0 && r.a.s > 0 ? r.a.s / (r.a.nc || r.a.n) : null, over = c != null && c > thr, sc = this.inScope(r), sel = this.state.day === r.d;
       const tip = this.tipT(this.dm(r.iso) + ' · ' + r.dow + (r.type ? ' · ' + r.type : ''), r.has ? [c != null ? ['CIR ngày', p(c, 2), over ? '#ff7a8a' : '#2f6df0'] : ['CIR ngày', 'chưa có Spend', '#94a3b8'], ['Ngưỡng', p(thr, 2), '#2fc7b8', 'kpi'], c != null ? [over ? 'Vượt ngưỡng' : 'Dưới ngưỡng', Math.abs((c - thr) * 100).toFixed(2) + 'pp', '#94a3b8'] : null, ['Spend · NMV', this.money(r.a.s) + ' · ' + this.money(r.a.n), '#94a3b8']] : [['Trạng thái', 'chưa có số liệu', '#94a3b8']]);
       s += '<g class="ox-hit' + (sc ? '' : ' dy-out') + '"' + (r.has ? ' data-day="' + r.d + '"' : '') + this.tipAttr(tip) + '><rect class="ox-hov" x="' + (L + bw * i) + '" y="' + T + '" width="' + bw + '" height="' + (ph + B - 6) + '" rx="5" ' + (sel ? 'style="fill:rgba(47,109,240,.16)"' : '') + '/>';
       if (c != null) s += '<rect x="' + (L + bw * i + bw * 0.2).toFixed(1) + '" y="' + Y(c).toFixed(1) + '" width="' + (bw * 0.6).toFixed(1) + '" height="' + Math.max(1, T + ph - Y(c)).toFixed(1) + '" rx="3" fill="' + (over ? '#ff7a8a' : 'url(#dyc)') + '"/>' + (over || c === maxV ? '<text x="' + cx(i).toFixed(1) + '" y="' + (Y(c) - 4).toFixed(1) + '" text-anchor="middle" class="ok-v' + (over ? ' r' : '') + '">' + (c * 100).toFixed(1) + '</text>' : '');
@@ -275,7 +276,7 @@ class Component extends DCLogic {
       s += '</g>';
     });
     s += '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + Y(thr) + '" y2="' + Y(thr) + '" stroke="var(--kpi-mark)" stroke-width="2.4" stroke-dasharray="6 4" pointer-events="none"/><text x="' + (W - Rr - 16) + '" y="' + (Y(thr) - 6) + '" text-anchor="end" class="ok-v k">Ngưỡng ' + (thr * 100).toFixed(1) + '%</text></svg>';
-    const nOver = R.filter(r => r.has && r.a.n > 0 && r.a.s > 0 && r.a.s / r.a.n > thr).length;
+    const nOver = R.filter(r => r.has && r.a.n > 0 && r.a.s > 0 && r.a.s / (r.a.nc || r.a.n) > thr).length;
     return this.panel('ox-c5', 'CIR theo ngày so với ngưỡng', 'Cột đỏ = ngày vượt ngưỡng ' + (thr * 100).toFixed(1) + '%', this.wrap('dy-w5', s), nOver ? nOver + ' ngày vượt ngưỡng. Ngày không có Spend (hoặc chưa ghi nhận) không hiện cột.' : 'Không ngày nào vượt ngưỡng. Ngày không có Spend không hiện cột.',
       this.legend([{ c: '#2f6df0', t: 'Cột xanh = trong ngưỡng' }, { c: '#ff7a8a', t: 'Cột đỏ = vượt ngưỡng' }, { c: 'var(--kpi-mark)', t: 'Đường = ngưỡng CIR', line: 1 }]));
   }
@@ -327,7 +328,7 @@ class Component extends DCLogic {
     const m = this.money.bind(this), p = this.pct.bind(this), cur = X.ch.key, cg = this.state.cg;
     const sg = v => v == null ? '—' : '<span class="' + (v >= 0 ? 'okw' : 'badw') + '">' + (v >= 0 ? '+' : '−') + m(Math.abs(v)) + '</span>';
     const GN = { plan: 'Kế hoạch', fc: 'Dự kiến cuối tháng', cost: 'Chi phí', eff: 'Hiệu quả' };
-    const cn = C => { const A = C.A; return { A, hasA: C.hasA, fin: C.ld >= C.dim ? C.M.n : C.M.proj, att: A.pN ? A.n / A.pN : null, cir: A.n && A.s > 0 ? A.s / A.n : null, use: A.pS ? A.s / A.pS : null }; };
+    const cn = C => { const A = C.A; return { A, hasA: C.hasA, fin: C.ld >= C.dim ? C.M.n : C.M.proj, att: A.pN ? A.n / A.pN : null, cir: A.n && A.s > 0 ? A.s / (A.nc || A.n) : null, use: A.pS ? A.s / A.pS : null }; };
     const COLS = [
       { g: 'fix', h: 'Actual MTD', f: (C, o) => o.hasA ? '<b>' + m(o.A.n) + '</b>' : '—' },
       { g: 'plan', h: 'Plan MTD', f: (C, o) => o.A.pN ? m(o.A.pN) : '—' },
@@ -340,7 +341,7 @@ class Component extends DCLogic {
       { g: 'cost', h: '% dùng Spend', f: (C, o) => o.use != null ? '<span class="' + (o.use <= 1 ? 'okw' : 'badw') + '">' + p(o.use, 0) + '</span>' + this.pb(o.use, o.use <= 1) : '—' },
       { g: 'eff', h: 'Plan Spend', f: (C, o) => o.A.pS ? m(o.A.pS) : '—' },
       { g: 'eff', h: 'Ngưỡng CIR', f: (C, o) => C.mt ? p(C.thr, 2) : '—' },
-      { g: 'eff', h: 'ROAS', f: (C, o) => o.cir != null ? '×' + (o.A.n / o.A.s).toFixed(1) : '—' },
+      { g: 'eff', h: 'ROAS', f: (C, o) => o.cir != null ? '×' + ((o.A.nc || o.A.n) / o.A.s).toFixed(1) : '—' },
       { g: 'eff', h: 'CPO', f: (C, o) => o.A.s > 0 && o.A.o ? m(o.A.s / o.A.o) : '—' },
       { g: 'eff', h: 'AOV', f: (C, o) => o.A.o ? m(o.A.n / o.A.o) : '—' }
     ].filter(c => c.g === 'fix' || cg[c.g]);
@@ -349,7 +350,7 @@ class Component extends DCLogic {
     const chips = '<div class="dy-row dy-cc"><span class="dy-lab">Hiển thị cột</span>' + Object.keys(GN).map(k => '<button type="button" class="ox-tab' + (cg[k] ? ' on' : '') + '" data-cg="' + k + '" aria-pressed="' + !!cg[k] + '">' + GN[k] + '</button>').join('') + '</div>';
     const tbl = '<div class="ox-tw"><table class="ox-t dy-t dy-wrp"><thead><tr><th class="l">Kênh</th>' + COLS.map(c => '<th>' + c.h + '</th>').join('') + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     return this.panel('ox-c12', 'Bảng theo kênh · ' + X.scopeLbl, 'Bấm một dòng để chọn kênh cho cả trang · chọn nhóm cột muốn xem', chips + tbl,
-      'MTD tính theo phạm vi lọc. Cuối tháng = MTD + plan các ngày còn lại (cả tháng, không đổi theo lọc ngày). CIR = Spend / NMV; ROAS = NMV / Spend; CPO = Spend / đơn không hủy. Total Ecom gồm cả đơn kênh Khác nên có thể lớn hơn tổng các kênh. Kênh thiếu Spend hiện — thay vì 0.', '');
+      'MTD tính theo phạm vi lọc. Cuối tháng = MTD + plan các ngày còn lại (cả tháng, không đổi theo lọc ngày). CIR = Spend / NMV; ROAS = NMV / Spend; CPO = Spend / đơn không hủy. CIR và ROAS chỉ tính NMV của kênh có Spend trong ngày đó (giống thẻ CIR ở Overview), để không bị kéo thấp bởi kênh thiếu Spend. Total Ecom gồm cả đơn kênh Khác nên có thể lớn hơn tổng các kênh. Kênh thiếu Spend hiện — thay vì 0.', '');
   }
   // ---- Plan vs Actual Spend theo kênh -------------------------------------------------------------------------
   tblSpendPlan(X) {
@@ -396,15 +397,15 @@ class Component extends DCLogic {
     const chip = r => r.type ? '<span class="dy-ty" style="background:' + (this.TYPEC[r.type] || '#e3edfb') + '">' + this.esc(r.type) + '</span>' : '<span class="dy-ty" style="background:#eef3fb;color:#7b8aa5">BAU</span>';
     if (tab === 'dow') return this.tblDow(X, tabs, fl);
     let head, cellsOf, tot;
-    const cir = (a) => a.n && a.s > 0 ? a.s / a.n : null;
+    const cir = (a) => a.n && a.s > 0 ? a.s / (a.nc || a.n) : null;
     if (tab === 'rev') {
       head = ['Ngày', 'Loại ngày', 'KPI NMV', 'NMV', '% đạt', 'Chênh vs KPI', 'GMV', 'Spend', 'CIR', 'Cancel rate'];
       cellsOf = r => { const a = r.a, att = r.has && r.tN ? a.n / r.tN : null; const c = r.has ? cir(a) : null; return [r.tN ? m(r.tN) : '—', r.has ? '<b>' + m(a.n) + '</b>' : '—', pc(att, att >= 1) + this.pb(att, att >= 1), r.has && r.tN ? sg(a.n - r.tN) : '—', r.has ? m(a.g) : '—', r.has && a.s > 0 ? '<span class="dy-sp">' + m(a.s) + '</span>' : '—', c != null ? '<span class="' + (c <= thr ? 'okw' : 'badw') + '">' + p(c, 1) + '</span>' : '—', r.has && a.g ? p(1 - a.n / a.g, 1) : '—']; };
       tot = ['<b>' + (A.pN ? m(A.pN) : '—') + '</b>', '<b>' + (hasA ? m(A.n) : '—') + '</b>', A.pN ? pc(A.n / A.pN, A.n >= A.pN) : '—', A.pN && hasA ? sg(A.n - A.pN) : '—', hasA ? m(A.g) : '—', hasA && A.s > 0 ? '<b>' + m(A.s) + '</b>' : '—', cir(A) != null ? p(cir(A), 1) : '—', hasA && A.g ? p(1 - A.n / A.g, 1) : '—'];
     } else if (tab === 'eff') {
       head = ['Ngày', 'Loại ngày', 'Plan Spend', 'Spend', '% dùng plan', 'CIR', 'vs ngưỡng', 'ROAS', 'CPO'];
-      cellsOf = r => { const a = r.a, c = r.has ? cir(a) : null; return [r.tS ? m(r.tS) : '—', r.has ? '<b>' + m(a.s) + '</b>' : '—', r.has && r.tS ? pc(a.s / r.tS, a.s <= r.tS) : '—', c != null ? '<b class="' + (c <= thr ? 'okw' : 'badw') + '">' + p(c, 2) + '</b>' : '—', c != null ? '<span class="' + (c <= thr ? 'okw' : 'badw') + '">' + (c <= thr ? '−' : '+') + Math.abs((c - thr) * 100).toFixed(2) + 'pp</span>' : '—', c != null ? '×' + (a.n / a.s).toFixed(1) : '—', r.has && a.s > 0 && a.o ? m(a.s / a.o) : '—']; };
-      const tc = cir(A); tot = [A.pS ? '<b>' + m(A.pS) + '</b>' : '—', hasA ? '<b>' + m(A.s) + '</b>' : '—', A.pS ? pc(A.s / A.pS, A.s <= A.pS) : '—', tc != null ? '<b>' + p(tc, 2) + '</b>' : '—', tc != null ? (tc <= thr ? '−' : '+') + Math.abs((tc - thr) * 100).toFixed(2) + 'pp' : '—', tc != null ? '×' + (A.n / A.s).toFixed(1) : '—', A.s > 0 && A.o ? m(A.s / A.o) : '—'];
+      cellsOf = r => { const a = r.a, c = r.has ? cir(a) : null; return [r.tS ? m(r.tS) : '—', r.has ? '<b>' + m(a.s) + '</b>' : '—', r.has && r.tS ? pc(a.s / r.tS, a.s <= r.tS) : '—', c != null ? '<b class="' + (c <= thr ? 'okw' : 'badw') + '">' + p(c, 2) + '</b>' : '—', c != null ? '<span class="' + (c <= thr ? 'okw' : 'badw') + '">' + (c <= thr ? '−' : '+') + Math.abs((c - thr) * 100).toFixed(2) + 'pp</span>' : '—', c != null ? '×' + ((a.nc || a.n) / a.s).toFixed(1) : '—', r.has && a.s > 0 && a.o ? m(a.s / a.o) : '—']; };
+      const tc = cir(A); tot = [A.pS ? '<b>' + m(A.pS) + '</b>' : '—', hasA ? '<b>' + m(A.s) + '</b>' : '—', A.pS ? pc(A.s / A.pS, A.s <= A.pS) : '—', tc != null ? '<b>' + p(tc, 2) + '</b>' : '—', tc != null ? (tc <= thr ? '−' : '+') + Math.abs((tc - thr) * 100).toFixed(2) + 'pp' : '—', tc != null ? '×' + ((A.nc || A.n) / A.s).toFixed(1) : '—', A.s > 0 && A.o ? m(A.s / A.o) : '—'];
     } else {
       head = ['Ngày', 'Loại ngày', 'Đơn đặt', 'Đơn không hủy', 'Đơn hủy', 'Tỷ lệ hủy', 'AOV'];
       cellsOf = r => { const a = r.a; return [r.has ? a.l.toLocaleString('en-US') : '—', r.has ? '<b>' + a.o.toLocaleString('en-US') + '</b>' : '—', r.has ? (a.l - a.o).toLocaleString('en-US') : '—', r.has && a.l ? p(1 - a.o / a.l, 1) : '—', r.has && a.o ? m(a.n / a.o) : '—']; };
