@@ -14,19 +14,48 @@ Lịch 5 phút của GitHub không chính xác tuyệt đối: lúc hệ thống
 
 ## Cài đặt lần đầu (làm một lần)
 
-### 1. Tạo service account Google để GitHub đọc được Drive
+Cần cấp cho GitHub quyền đọc thư mục Drive. Tất cả đều miễn phí: Drive API không tính phí, không cần bật thanh toán hay nhập thẻ.
 
-1. Vào https://console.cloud.google.com/ và tạo một project (ví dụ `bluestone-dashboard`).
-2. Vào **APIs & Services → Library**, tìm **Google Drive API** và bấm **Enable**.
-3. Vào **IAM & Admin → Service Accounts → Create service account**. Đặt tên (ví dụ `dashboard-reader`), bỏ qua phần cấp quyền, rồi bấm **Done**.
-4. Bấm vào service account vừa tạo, mở tab **Keys → Add key → Create new key → JSON**. Một file `.json` sẽ được tải về máy.
-5. Mở thư mục BlueStone gốc trên Drive, bấm **Share**, dán email của service account (dạng `dashboard-reader@...iam.gserviceaccount.com`) và chọn quyền **Viewer**.
+### 1A. Cách khuyên dùng: tài khoản Gmail cá nhân, dùng key JSON
 
-### 2. Đưa key vào GitHub
+Nếu Google Cloud báo **"Service account key creation is disabled"** (`iam.disableServiceAccountKeyCreation`), nghĩa là bạn đang đăng nhập bằng tài khoản thuộc một tổ chức (thường là email công ty). Hãy đăng xuất và đăng nhập bằng **Gmail cá nhân** (tài khoản sở hữu thư mục Drive), rồi tạo project mới ở mục **No organization**. Project này không bị chính sách đó chặn.
 
-1. Vào repo → **Settings → Secrets and variables → Actions → New repository secret**.
-2. **Name:** `GDRIVE_SA_JSON`. **Secret:** dán toàn bộ nội dung file `.json` ở bước 1.4.
-3. (Không bắt buộc) Nếu đổi thư mục gốc trên Drive: vào tab **Variables**, tạo biến `DRIVE_ROOT_ID` bằng ID của thư mục mới. Mặc định là `1_m_w3myggK6fXT4xdEnD8Jr5FAjuLCUk`.
+1. Vào https://console.cloud.google.com/ và tạo project (ví dụ `bluestone-dashboard`, Location: **No organization**).
+2. Vào **APIs & Services → Library**, bật **Google Drive API**.
+3. Vào **IAM & Admin → Service Accounts → Create service account**, đặt tên `dashboard-reader` rồi bấm **Done**.
+4. Bấm vào service account vừa tạo → **Keys → Add key → Create new key → JSON**.
+5. Share thư mục BlueStone trên Drive cho email của service account (`dashboard-reader@...iam.gserviceaccount.com`), quyền **Viewer**.
+6. Trên GitHub: **Settings → Secrets and variables → Actions → New repository secret**. Name: `GDRIVE_SA_JSON`. Secret: dán toàn bộ nội dung file `.json`.
+
+### 1B. Cách không dùng key (khi bắt buộc dùng tài khoản tổ chức)
+
+Dùng Workload Identity Federation: GitHub tự chứng minh danh tính với Google, không có file key nào phải giữ.
+
+1. Trong project Google Cloud, bấm biểu tượng **Cloud Shell** (`>_`) ở góc trên bên phải (miễn phí), rồi dán toàn bộ đoạn sau:
+
+```bash
+PROJECT_ID=$(gcloud config get-value project)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+gcloud services enable drive.googleapis.com iamcredentials.googleapis.com sts.googleapis.com
+gcloud iam service-accounts create dashboard-reader --display-name="BlueStone dashboard reader"
+gcloud iam workload-identity-pools create github --location=global --display-name="GitHub"
+gcloud iam workload-identity-pools providers create-oidc bluestone --location=global \
+  --workload-identity-pool=github --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository_owner=assertion.repository_owner" \
+  --attribute-condition="assertion.repository_owner=='krysnguyenkhoa'"
+gcloud iam service-accounts add-iam-policy-binding dashboard-reader@$PROJECT_ID.iam.gserviceaccount.com \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository_owner/krysnguyenkhoa"
+echo "GCP_WIF_PROVIDER = projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/bluestone"
+echo "GCP_SA_EMAIL     = dashboard-reader@$PROJECT_ID.iam.gserviceaccount.com"
+```
+
+2. Share thư mục BlueStone trên Drive cho email `GCP_SA_EMAIL` vừa in ra, quyền **Viewer**. Nếu Drive không cho share ra ngoài tổ chức, xem lưu ý cuối trang.
+3. Trên GitHub: **Settings → Secrets and variables → Actions → tab Variables → New repository variable**. Tạo 2 biến `GCP_WIF_PROVIDER` và `GCP_SA_EMAIL`, giá trị lấy từ 2 dòng vừa in ra.
+
+### 2. Biến tùy chọn
+
+Nếu đổi thư mục gốc trên Drive, tạo biến `DRIVE_ROOT_ID` bằng ID thư mục mới. Mặc định là `1_m_w3myggK6fXT4xdEnD8Jr5FAjuLCUk`.
 
 ### 3. Bật GitHub Pages
 
@@ -70,6 +99,7 @@ Chạy trên máy: `cd pipeline && npm ci && pip install -r requirements.txt && 
 
 ## Lưu ý
 
+- **Share Drive bị chặn:** nếu tổ chức không cho share ra ngoài, hãy tạo project bằng Gmail cá nhân (cách 1A) và giữ thư mục Drive ở Gmail cá nhân.
 - **Repo public:** ai có link Pages đều xem được doanh thu, KPI và chi phí. File Excel gốc trên Drive không được đưa lên repo.
 - **Năm 2026:** bộ xử lý đang gắn với năm 2026. Sang năm 2027 cần chỉnh lại (file KPI, mốc năm trong Order_data).
 - **Tạm dừng:** GitHub tự tắt lịch chạy nếu repo không có hoạt động trong 60 ngày. Mỗi lần dữ liệu đổi, workflow tự commit trạng thái nên lịch vẫn chạy khi Drive còn được cập nhật. Nếu bị tắt, vào tab Actions để bật lại.

@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      id-token: write
     outputs:
       changed: ${{ steps.sync.outputs.changed }}
     steps:
@@ -39,6 +40,12 @@ jobs:
           cache: pip
           cache-dependency-path: pipeline/requirements.txt
       - run: pip install -q google-api-python-client==2.202.0 google-auth==2.62.2
+      - name: Xác thực Google không dùng key (Workload Identity Federation)
+        if: vars.GCP_WIF_PROVIDER != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
       - name: So sánh Drive
         id: sync
         env:
@@ -77,6 +84,12 @@ jobs:
         run: |
           pip install -q -r pipeline/requirements.txt
           cd pipeline && npm ci --no-audit --no-fund
+      - name: Xác thực Google không dùng key (Workload Identity Federation)
+        if: vars.GCP_WIF_PROVIDER != ''
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SA_EMAIL }}
       - name: Tải dữ liệu Drive
         env:
           GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}

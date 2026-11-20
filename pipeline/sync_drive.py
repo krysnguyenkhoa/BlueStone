@@ -19,13 +19,20 @@ FORCE = os.environ.get('FORCE', '').lower() == 'true'
 CHECK_ONLY = os.environ.get('CHECK_ONLY', '').lower() == 'true'  # chỉ so sánh, không tải
 FOLDER = 'application/vnd.google-apps.folder'
 
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 key = os.environ.get('GDRIVE_SA_JSON')
-if not key:
-    print('::warning::Chưa có secret GDRIVE_SA_JSON (key JSON của service account). Bỏ qua lượt quét này, xem README để cài đặt.')
+if key:
+    # Cách 1: key JSON của service account (secret GDRIVE_SA_JSON)
+    creds = service_account.Credentials.from_service_account_info(json.loads(key), scopes=SCOPES)
+elif os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+    # Cách 2: không dùng key, xác thực qua Workload Identity Federation (google-github-actions/auth)
+    import google.auth
+    creds, _ = google.auth.default(scopes=SCOPES)
+else:
+    print('::warning::Chưa cấu hình quyền đọc Drive (secret GDRIVE_SA_JSON hoặc biến GCP_WIF_PROVIDER + GCP_SA_EMAIL). Bỏ qua lượt quét này, xem README.')
     if os.environ.get('GITHUB_OUTPUT'):
         open(os.environ['GITHUB_OUTPUT'], 'a').write('changed=false\n')
     sys.exit(0)
-creds = service_account.Credentials.from_service_account_info(json.loads(key), scopes=['https://www.googleapis.com/auth/drive.readonly'])
 svc = build('drive', 'v3', credentials=creds, cache_discovery=False)
 
 
